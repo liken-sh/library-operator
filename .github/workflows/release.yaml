@@ -49,7 +49,7 @@ concurrency:
 
 jobs:
   release:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-26.04
     steps:
       # The media browser image builds liken-iced from the submodule
       # at media-browser/brand, so the checkout brings every submodule.
