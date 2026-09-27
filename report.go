@@ -79,12 +79,18 @@ type libraryReport struct {
 type reports struct {
 	mutex  sync.Mutex
 	latest map[string]libraryReport
-	wake   chan<- struct{}
+	// The keys the last pass dropped because no Library holds them. A
+	// report of one of them wakes no pass, because a reporter republishes
+	// a library whose rows outlive its Library each time the catalog
+	// changes, and the pass it woke would only clear the report again.
+	gone map[string]bool
+	wake chan<- struct{}
 }
 
 func newReports(wake chan<- struct{}) *reports {
 	return &reports{
 		latest: map[string]libraryReport{},
+		gone:   map[string]bool{},
 		wake:   wake,
 	}
 }
@@ -115,8 +121,9 @@ func (r *reports) fold(namespace, name string, report libraryReport) []libraryRu
 	r.mutex.Lock()
 	before, held := r.latest[key]
 	r.latest[key] = report
+	gone := r.gone[key]
 	r.mutex.Unlock()
-	if same, err := sameStatus(before, report); !held || err != nil || !same {
+	if same, err := sameStatus(before, report); !gone && (!held || err != nil || !same) {
 		r.poke()
 	}
 	if !held {
@@ -176,6 +183,12 @@ func (r *reports) retain(live map[string]bool) []string {
 		if !live[key] {
 			delete(r.latest, key)
 			keys = append(keys, key)
+			r.gone[key] = true
+		}
+	}
+	for key := range r.gone {
+		if live[key] {
+			delete(r.gone, key)
 		}
 	}
 	slices.Sort(keys)

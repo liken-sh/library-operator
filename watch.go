@@ -70,7 +70,7 @@ func watchLibraries(c *Client, resourceVersion string, wake chan<- struct{}, m *
 		path := librariesPath + "?watch=true&allowWatchBookmarks=true&resourceVersion=" + resourceVersion
 		resp, err := c.Do(watchContext(), http.MethodGet, path, nil)
 		if err == nil && resp.StatusCode == http.StatusOK {
-			resourceVersion = readWatchStream(resp, resourceVersion, wake)
+			resourceVersion = readWatchStream(c, resp, resourceVersion, wake)
 		}
 		if resp != nil {
 			drain(resp.Body)
@@ -103,7 +103,7 @@ func watchCatalogs(c *Client, resourceVersion string, wake chan<- struct{}, m *m
 		path := catalogsPath + "?watch=true&allowWatchBookmarks=true&resourceVersion=" + resourceVersion
 		resp, err := c.Do(watchContext(), http.MethodGet, path, nil)
 		if err == nil && resp.StatusCode == http.StatusOK {
-			resourceVersion = readWatchStream(resp, resourceVersion, wake)
+			resourceVersion = readWatchStream(c, resp, resourceVersion, wake)
 		}
 		if resp != nil {
 			drain(resp.Body)
@@ -135,7 +135,7 @@ func watchPlayers(c *Client, resourceVersion string, wake chan<- struct{}, m *me
 		path := playersPath + "?watch=true&allowWatchBookmarks=true&resourceVersion=" + resourceVersion
 		resp, err := c.Do(watchContext(), http.MethodGet, path, nil)
 		if err == nil && resp.StatusCode == http.StatusOK {
-			resourceVersion = readWatchStream(resp, resourceVersion, wake)
+			resourceVersion = readWatchStream(c, resp, resourceVersion, wake)
 		}
 		if resp != nil {
 			drain(resp.Body)
@@ -164,7 +164,7 @@ func watchMediaPreferences(c *Client, resourceVersion string, wake chan<- struct
 		path := mediaPreferencesPath + "?watch=true&allowWatchBookmarks=true&resourceVersion=" + resourceVersion
 		resp, err := c.Do(watchContext(), http.MethodGet, path, nil)
 		if err == nil && resp.StatusCode == http.StatusOK {
-			resourceVersion = readWatchStream(resp, resourceVersion, wake)
+			resourceVersion = readWatchStream(c, resp, resourceVersion, wake)
 		}
 		if resp != nil {
 			drain(resp.Body)
@@ -194,7 +194,7 @@ func watchMetadataProviders(c *Client, resourceVersion string, wake chan<- struc
 		path := metadataProvidersPath + "?watch=true&allowWatchBookmarks=true&resourceVersion=" + resourceVersion
 		resp, err := c.Do(watchContext(), http.MethodGet, path, nil)
 		if err == nil && resp.StatusCode == http.StatusOK {
-			resourceVersion = readWatchStream(resp, resourceVersion, wake)
+			resourceVersion = readWatchStream(c, resp, resourceVersion, wake)
 		}
 		if resp != nil {
 			drain(resp.Body)
@@ -224,7 +224,7 @@ func watchPlays(c *Client, resourceVersion string, wake chan<- struct{}, m *metr
 		path := playsAllPath + "?watch=true&allowWatchBookmarks=true&resourceVersion=" + resourceVersion
 		resp, err := c.Do(watchContext(), http.MethodGet, path, nil)
 		if err == nil && resp.StatusCode == http.StatusOK {
-			resourceVersion = readWatchStream(resp, resourceVersion, wake)
+			resourceVersion = readWatchStream(c, resp, resourceVersion, wake)
 		}
 		if resp != nil {
 			drain(resp.Body)
@@ -254,7 +254,7 @@ func watchPeople(c *Client, resourceVersion string, wake chan<- struct{}, m *met
 		path := peoplePath + "?watch=true&allowWatchBookmarks=true&resourceVersion=" + resourceVersion
 		resp, err := c.Do(watchContext(), http.MethodGet, path, nil)
 		if err == nil && resp.StatusCode == http.StatusOK {
-			resourceVersion = readWatchStream(resp, resourceVersion, wake)
+			resourceVersion = readWatchStream(c, resp, resourceVersion, wake)
 		}
 		if resp != nil {
 			drain(resp.Body)
@@ -290,7 +290,7 @@ func watchPods(c *Client, resourceVersion string, wake chan<- struct{}, m *metri
 			"&resourceVersion=" + resourceVersion
 		resp, err := c.Do(watchContext(), http.MethodGet, path, nil)
 		if err == nil && resp.StatusCode == http.StatusOK {
-			resourceVersion = readWatchStream(resp, resourceVersion, wake)
+			resourceVersion = readWatchStream(c, resp, resourceVersion, wake)
 		}
 		if resp != nil {
 			drain(resp.Body)
@@ -309,7 +309,7 @@ func watchPods(c *Client, resourceVersion string, wake chan<- struct{}, m *metri
 
 // ReadWatchStream reads one connection's worth of events. The returned
 // version is where the next watch resumes.
-func readWatchStream(resp *http.Response, resourceVersion string, wake chan<- struct{}) string {
+func readWatchStream(c *Client, resp *http.Response, resourceVersion string, wake chan<- struct{}) string {
 	decoder := json.NewDecoder(resp.Body)
 	for {
 		var event struct {
@@ -333,6 +333,11 @@ func readWatchStream(resp *http.Response, resourceVersion string, wake chan<- st
 		if event.Type == "BOOKMARK" {
 			// A bookmark moves the resume point and reconciles
 			// nothing, so it earns no wake.
+			continue
+		}
+		// The echo of this operator's own update carries what the pass
+		// wrote, so it earns no wake either.
+		if c.written.own(event.Object.Metadata.ResourceVersion) {
 			continue
 		}
 		poke(wake)

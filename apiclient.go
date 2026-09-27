@@ -46,6 +46,9 @@ type Client struct {
 	base        string
 	http        *http.Client
 	credentials string
+	// The versions this client's updates answered with, which echo.go
+	// holds the rule for.
+	written echoes
 }
 
 // NewClient builds a client from its three parts. InClusterClient
@@ -123,6 +126,20 @@ func (c *Client) RequestWithType(ctx context.Context, method, path, contentType 
 	if resp.StatusCode < 200 || resp.StatusCode > 299 {
 		message, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
 		return fmt.Errorf("%s %s: %s: %s", method, path, resp.Status, message)
+	}
+	// An update's answer is read whole, because the client remembers the
+	// version it carries as well as decoding it. Every other answer is
+	// decoded as it streams, so a large list is never held twice.
+	if method == http.MethodPut || method == http.MethodPatch {
+		answer, err := io.ReadAll(resp.Body)
+		if err != nil {
+			return err
+		}
+		c.written.remember(answer)
+		if out == nil {
+			return nil
+		}
+		return json.Unmarshal(answer, out)
 	}
 	if out == nil {
 		return nil

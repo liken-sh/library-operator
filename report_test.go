@@ -149,3 +149,28 @@ func TestAReportThatRepeatsTheHeldOneWakesNoPass(t *testing.T) {
 
 	expectNoReportWake(t, wake)
 }
+
+// A reporter keeps publishing a library whose rows outlive its Library,
+// each time the catalog changes, and every pass clears that report again.
+// A report of a Library the last pass found gone wakes no pass, because
+// the pass would only clear it. The desk still holds it, so the next pass
+// clears it. A Library declared again under that name wakes the loop
+// through its own watch, and its reports wake the loop from then on.
+func TestAReportOfALibraryThePassFoundGoneWakesNoPass(t *testing.T) {
+	desk, wake := reportDesk(t)
+	desk.fold("house", "gone", walkedReport())
+	waitForReportWake(t, wake)
+	if dropped := desk.retain(map[string]bool{}); len(dropped) != 1 {
+		t.Fatalf("dropped = %v, want the gone library", dropped)
+	}
+
+	desk.fold("house", "gone", walkedReport())
+
+	expectNoReportWake(t, wake)
+	if dropped := desk.retain(map[string]bool{}); len(dropped) != 1 {
+		t.Errorf("dropped = %v, want the report the pass clears again", dropped)
+	}
+	desk.retain(map[string]bool{libraryKey("house", "gone"): true})
+	desk.fold("house", "gone", walkedReport())
+	waitForReportWake(t, wake)
+}
